@@ -7,6 +7,7 @@ import {
 	Plugin,
 	PluginSettingTab,
 	Setting,
+	WorkspaceRibbon,
 } from "obsidian";
 import * as dull from "utils/jimp";
 
@@ -15,6 +16,7 @@ import * as dull from "utils/jimp";
 interface DullPluginSettings {
 	algo: "greyscale" | "quantize" | "compress";
 	bytesSaved: number;
+	enabled: boolean;
 	quality: number;
 }
 
@@ -28,11 +30,13 @@ const DEFAULT_SETTINGS: DullPluginSettings = {
 	algo: "compress",
 	bytesSaved: 0,
 	quality: 50,
+	enabled: true,
 };
 
 export default class DullPlugin extends Plugin {
 	settings: DullPluginSettings;
 	statusBar: HTMLElement;
+	ribbonIcon: HTMLElement;
 
 	async onload() {
 		console.log("Dull loading..");
@@ -41,135 +45,67 @@ export default class DullPlugin extends Plugin {
 		this.addStatusBarItem();
 		this.statusBar = this.addStatusBarItem();
 
+		this.settings.bytesSaved &&
+			this.statusBar.setText(this._statusText(this.settings.bytesSaved));
+
+		// drop handler
 		this.registerEvent(
 			this.app.workspace.on(
 				"editor-drop",
 				async (evt: DragEvent, editor: Editor) => {
-					if (!evt.dataTransfer) {
-						return;
-					}
+					if (!this.settings.enabled) return; // use default behavior if dull is disabled
+					if (!evt.dataTransfer) return;
+
 					evt.preventDefault();
 					const { files } = evt.dataTransfer;
-					const { fileManager, workspace, vault } = this.app;
 
 					for (let i = 0; i < files.length; i++) {
 						const file = files.item(i);
-						if (
-							!(
-								file?.name?.endsWith(".jpg") ||
-								file?.name?.endsWith(".png")
-							)
-						)
-							return;
+						if (file) await this.processImage(file, editor);
+					}
+				}
+			)
+		);
 
-						const oldBuffer = await file.arrayBuffer();
+		// paste handler
+		this.registerEvent(
+			this.app.workspace.on(
+				"editor-paste",
+				async (evt: ClipboardEvent, editor: Editor) => {
+					if (!this.settings.enabled) return; // use default behavior if dull is disabled
+					const { files } = evt.clipboardData || {};
+					if (!files?.length) return;
 
-						// run algo
-						const newBuffer = await algos[this.settings.algo](
-							oldBuffer,
-							this.settings.quality
-						);
-
-						// write file
-						const path =
-							await fileManager.getAvailablePathForAttachment(
-								file.name
-							);
-						const newFile = await vault.createBinary(
-							path,
-							newBuffer as any
-						);
-						editor.replaceRange(
-							fileManager.generateMarkdownLink(
-								newFile,
-								workspace.getActiveFile()?.path!
-							),
-							editor.getCursor()
-						);
-
-						// share results
-						const bytesSaved = file.size - newFile.stat.size;
-						new Notice(
-							`dull just saved you: ${bytesSaved} bytes (${(
-								(bytesSaved / file.size) *
-								100
-							).toFixed(0)}%)`
-						);
-
-						this.settings.bytesSaved += bytesSaved;
-						this.statusBar.setText(
-							`dull has saved you ${this.settings.bytesSaved} bytes total`
-						);
+					evt.preventDefault();
+					for (let i = 0; i < files.length; i++) {
+						const file = files.item(i);
+						if (file) await this.processImage(file, editor);
 					}
 				}
 			)
 		);
 
 		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon(
+		this.ribbonIcon = this.addRibbonIcon(
 			"image-down",
-			"dull",
+			"Toggle Dull",
 			(evt: MouseEvent) => {
 				// Called when the user clicks the icon.
-				new DullModal(this.app).open();
+				this.settings.enabled = !this.settings.enabled;
+				this.saveSettings();
+				this._updateRibbonIconState();
+				new Notice(
+					`Dull ${this.settings.enabled ? "enabled" : "disabled"}`
+				);
+				// not implementing modal for this for now
+				// new DullModal(this.app).open();
 			}
 		);
-		// Perform additional things with the ribbon
-		ribbonIconEl.addClass("my-plugin-ribbon-class");
-
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: "open-sample-modal-simple",
-			name: "Open sample modal (simple)",
-			callback: () => {
-				new DullModal(this.app).open();
-			},
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: "sample-editor-command",
-			name: "Sample editor command",
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				console.log(editor.getSelection());
-				editor.replaceSelection("Sample Editor Command");
-			},
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: "open-sample-modal-complex",
-			name: "Open sample modal (complex)",
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView =
-					this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new DullModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-			},
-		});
+		this.ribbonIcon.addClass("dull-ribbon-icon");
+		this._updateRibbonIconState();
 
 		// This adds a settings tab so the user can configure various aspects of the plugin
 		this.addSettingTab(new DullSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		// this.registerDomEvent(document, "click", (evt: MouseEvent) => {
-		// 	console.log("click", evt);
-		// });
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(
-			window.setInterval(() => console.log("setInterval"), 5 * 60 * 1000)
-		);
 	}
 
 	onunload() {}
@@ -184,6 +120,68 @@ export default class DullPlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+	}
+
+	private async processImage(file: File, editor: Editor) {
+		const { fileManager, workspace, vault } = this.app;
+
+		if (
+			!(
+				file?.type.startsWith("image/jpeg") ||
+				file?.type.startsWith("image/png")
+			)
+		) {
+			return;
+		}
+
+		const oldBuffer = await file.arrayBuffer();
+
+		// run algo
+		const newBuffer = await algos[this.settings.algo](
+			oldBuffer,
+			this.settings.quality
+		);
+
+		// write file
+		const filename =
+			file.name ||
+			`pasted-image-${Date.now()}.${file.type.split("/")[1]}`;
+		const path = await fileManager.getAvailablePathForAttachment(filename);
+		const newFile = await vault.createBinary(path, newBuffer as any);
+
+		editor.replaceRange(
+			fileManager.generateMarkdownLink(
+				newFile,
+				workspace.getActiveFile()?.path!
+			),
+			editor.getCursor()
+		);
+
+		// notify results
+		const bytesSaved = file.size - newFile.stat.size;
+		new Notice(
+			`${bytesSaved} bytes (${((bytesSaved / file.size) * 100).toFixed(
+				0
+			)}%)`
+		);
+
+		this.settings.bytesSaved += bytesSaved;
+		this.statusBar.setText(this._statusText(this.settings.bytesSaved));
+	}
+
+	private _statusText(bytesSaved: number) {
+		return `Dull: Saved ${bytesSaved} bytes total`;
+	}
+	private _updateRibbonIconState() {
+		if (this.ribbonIcon) {
+			const icon = this.ribbonIcon;
+			if (icon) {
+				icon.classList.remove("dull-enabled", "dull-disabled");
+				icon.classList.add(
+					this.settings.enabled ? "dull-enabled" : "dull-disabled"
+				);
+			}
+		}
 	}
 }
 
