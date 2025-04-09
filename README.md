@@ -1,4 +1,6 @@
 # Dull - image compression for Obsidian
+![dull-toggle](https://github.com/user-attachments/assets/e8ff984f-94be-4f4e-9687-e3eaaa15907b)
+
 
 ## Development
 
