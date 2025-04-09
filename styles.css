@@ -6,3 +6,27 @@ available in the app when your plugin is enabled.
 If your plugin does not need CSS, delete this file.
 
 */
+
+.dull-ribbon-icon {
+	position: relative;
+}
+
+.dull-ribbon-icon::after {
+	content: "";
+	position: absolute;
+	bottom: 3px;
+	right: 3px;
+	width: 4px;
+	height: 4px;
+	border-radius: 50%;
+	background-color: green;
+	transition: background-color 0.2s ease;
+}
+
+.dull-ribbon-icon.dull-enabled::after {
+	background-color: var(--color-green) !important;
+}
+
+.dull-ribbon-icon.dull-disabled::after {
+	background-color: var(--text-error) !important;
+}
