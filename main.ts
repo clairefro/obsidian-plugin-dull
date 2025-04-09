@@ -160,9 +160,10 @@ export default class DullPlugin extends Plugin {
 		// notify results
 		const bytesSaved = file.size - newFile.stat.size;
 		new Notice(
-			`${bytesSaved} bytes (${((bytesSaved / file.size) * 100).toFixed(
-				0
-			)}%)`
+			`${bytesSaved} bytes saved (${(
+				(bytesSaved / file.size) *
+				100
+			).toFixed(0)}%)`
 		);
 
 		this.settings.bytesSaved += bytesSaved;
