@@ -1,15 +1,14 @@
 import {
 	App,
 	Editor,
-	MarkdownView,
 	Modal,
 	Notice,
 	Plugin,
 	PluginSettingTab,
 	Setting,
-	WorkspaceRibbon,
 } from "obsidian";
 import * as dull from "utils/jimp";
+import { humanify } from "utils/humanify";
 
 // Remember to rename these classes and interfaces!
 
@@ -160,7 +159,7 @@ export default class DullPlugin extends Plugin {
 		// notify results
 		const bytesSaved = file.size - newFile.stat.size;
 		new Notice(
-			`${bytesSaved} bytes saved (${(
+			`${humanify(bytesSaved)} saved (${(
 				(bytesSaved / file.size) *
 				100
 			).toFixed(0)}%)`
@@ -171,7 +170,7 @@ export default class DullPlugin extends Plugin {
 	}
 
 	private _statusText(bytesSaved: number) {
-		return `Dull: Saved ${bytesSaved} bytes total`;
+		return `Dull: Saved ${humanify(bytesSaved)} total`;
 	}
 	private _updateRibbonIconState() {
 		if (this.ribbonIcon) {
