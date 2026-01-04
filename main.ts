@@ -7,8 +7,8 @@ import {
 	PluginSettingTab,
 	Setting,
 } from "obsidian";
-import * as dull from "utils/jimp";
-import { humanify } from "utils/humanify";
+import * as dull from "./utils/jimp";
+import { humanify } from "./utils/humanify";
 
 // Remember to rename these classes and interfaces!
 
@@ -38,7 +38,7 @@ export default class DullPlugin extends Plugin {
 	ribbonIcon: HTMLElement;
 
 	async onload() {
-		console.log("Dull loading..");
+		console.log("[Dull] loading..");
 		await this.loadSettings();
 
 		this.addStatusBarItem();
@@ -148,13 +148,16 @@ export default class DullPlugin extends Plugin {
 		const path = await fileManager.getAvailablePathForAttachment(filename);
 		const newFile = await vault.createBinary(path, newBuffer as any);
 
-		editor.replaceRange(
-			fileManager.generateMarkdownLink(
-				newFile,
-				workspace.getActiveFile()?.path!
-			),
-			editor.getCursor()
+		const link = this.app.fileManager.generateMarkdownLink(
+			newFile,
+			this.app.workspace.getActiveFile()?.path ?? ""
 		);
+
+		// Turn link into an embed
+		const embed = `!${link}`;
+
+		// Insert into editor
+		editor.replaceSelection(embed);
 
 		// notify results
 		const bytesSaved = file.size - newFile.stat.size;
